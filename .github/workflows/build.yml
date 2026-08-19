@@ -21,7 +21,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ChoongumaGrowHelper-macOS-universal
+          name: ChoongumaButtonHelper-macOS-universal
           path: |
-            dist/ChoongumaGrowHelper-macOS-universal.zip
-            dist/ChoongumaGrowHelper-macOS-universal.zip.sha256
+            dist/ChoongumaButtonHelper-macOS-universal.zip
+            dist/ChoongumaButtonHelper-macOS-universal.zip.sha256

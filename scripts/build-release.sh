@@ -5,9 +5,9 @@ set -euo pipefail
 release_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 release_build_root="${release_root}/.build-release"
 release_dist_dir="${release_root}/dist"
-release_app_name="춘구마 키우기 도우미.app"
+release_app_name="춘구마 버튼 도우미.app"
 release_app_path="${release_dist_dir}/${release_app_name}"
-release_zip_path="${release_dist_dir}/ChoongumaGrowHelper-macOS-universal.zip"
+release_zip_path="${release_dist_dir}/ChoongumaButtonHelper-macOS-universal.zip"
 release_module_cache="${release_build_root}/module-cache"
 release_package_cache="${release_build_root}/package-cache"
 
@@ -47,6 +47,11 @@ build_arch() {
         --configuration release \
         --arch "${release_arch}" \
         --scratch-path "${release_scratch}"
+}
+
+bin_path_for_arch() {
+    local release_arch="$1"
+    local release_scratch="${release_build_root}/${release_arch}"
     swift build \
         --disable-sandbox \
         --cache-path "${release_package_cache}" \
@@ -56,8 +61,10 @@ build_arch() {
         --show-bin-path
 }
 
-arm_bin_dir="$(build_arch arm64 | tail -n 1)"
-intel_bin_dir="$(build_arch x86_64 | tail -n 1)"
+build_arch arm64
+build_arch x86_64
+arm_bin_dir="$(bin_path_for_arch arm64 | tail -n 1)"
+intel_bin_dir="$(bin_path_for_arch x86_64 | tail -n 1)"
 
 lipo -create \
     "${arm_bin_dir}/ChoongumaGrowHelper" \

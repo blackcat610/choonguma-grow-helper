@@ -31,6 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ("400ms", 0.400),
         ("500ms", 0.500)
     ]
+    private let inputTargetOptions: [(String, InputDeliveryMode)] = [
+        ("버튼 직접 누르기 · 포커스 불필요", .accessibilityButton),
+        ("카카오톡 직접 키 · 포커스 불필요", .kakaoProcessKey),
+        ("현재 활성 앱 · 포커스 필요", .frontmostKey)
+    ]
 
     private var window: NSWindow!
     private var statusItem: NSStatusItem!
@@ -43,6 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var waterPopup: NSPopUpButton!
     private var readyFramePopup: NSPopUpButton!
     private var inputDelayPopup: NSPopUpButton!
+    private var inputTargetPopup: NSPopUpButton!
+    private var autoReplayButton: NSButton!
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
 
@@ -104,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(waterPopup.indexOfSelectedItem, forKey: "waterKeyIndex")
         defaults.set(readyFramePopup.indexOfSelectedItem, forKey: "readyFrameIndex")
         defaults.set(inputDelayPopup.indexOfSelectedItem, forKey: "inputDelayIndex")
+        defaults.set(inputTargetPopup.indexOfSelectedItem, forKey: "inputTargetIndex")
+        defaults.set(autoReplayButton.state == .on, forKey: "autoReplayEnabled")
     }
 
     private func startAutomation() {
@@ -111,10 +120,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let waterIndex = waterPopup.indexOfSelectedItem
         let readyFrameIndex = readyFramePopup.indexOfSelectedItem
         let inputDelayIndex = inputDelayPopup.indexOfSelectedItem
+        let inputTargetIndex = inputTargetPopup.indexOfSelectedItem
         guard keyBindings.indices.contains(foodIndex),
               keyBindings.indices.contains(waterIndex),
               readyFrameOptions.indices.contains(readyFrameIndex),
-              inputDelayOptions.indices.contains(inputDelayIndex) else { return }
+              inputDelayOptions.indices.contains(inputDelayIndex),
+              inputTargetOptions.indices.contains(inputTargetIndex) else { return }
 
         guard keyBindings[foodIndex].keyCode != keyBindings[waterIndex].keyCode else {
             updateStatus("키 설정을 확인하세요", detail: "음식과 물은 서로 다른 키여야 합니다.")
@@ -128,7 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             foodKey: keyBindings[foodIndex].keyCode,
             waterKey: keyBindings[waterIndex].keyCode,
             requiredReadyFrames: readyFrameOptions[readyFrameIndex].1,
-            inputDelay: inputDelayOptions[inputDelayIndex].1
+            inputDelay: inputDelayOptions[inputDelayIndex].1,
+            inputDeliveryMode: inputTargetOptions[inputTargetIndex].1,
+            autoReplay: autoReplayButton.state == .on
         )
     }
 
@@ -174,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showPanel()
             }
         }
-        engine.onInput = { [weak self] choice, count, whiteScore, grayScore in
+        engine.onInput = { [weak self] choice, count, whiteScore, grayScore, deliveryResult in
             guard let self else { return }
             let keyTitle: String
             if choice == .food {
@@ -182,9 +195,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 keyTitle = self.keyBindings[self.waterPopup.indexOfSelectedItem].title
             }
+            let deliveryText: String
+            switch deliveryResult {
+            case .accessibilityButton:
+                deliveryText = choice == .food ? "밥 주기 버튼" : "물 주기 버튼"
+            case .kakaoProcessKey:
+                deliveryText = "\(keyTitle) · 카카오톡 직접 키"
+            case .accessibilityFallbackKey:
+                deliveryText = "\(keyTitle) · 버튼 미노출로 직접 키"
+            case .frontmostKey:
+                deliveryText = "\(keyTitle) · 현재 활성 앱"
+            }
             self.updateStatus(
                 "자동 입력 중 · \(count)회",
-                detail: "최근 인식: \(choice.rawValue) → \(keyTitle)  (판별값 \(Int(whiteScore))/\(Int(grayScore)))"
+                detail: "최근 인식: \(choice.rawValue) → \(deliveryText)  (판별값 \(Int(whiteScore))/\(Int(grayScore)))"
             )
         }
     }
@@ -206,7 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "춘구마 키우기 도우미 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "춘구마 버튼 도우미 정보", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "종료", action: #selector(quitApplication), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
@@ -217,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(
             systemSymbolName: "cup.and.saucer.fill",
-            accessibilityDescription: "춘구마 키우기 도우미"
+            accessibilityDescription: "춘구마 버튼 도우미"
         )
         statusItem.button?.contentTintColor = .secondaryLabelColor
 
@@ -241,19 +265,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 470, height: 486),
+            contentRect: NSRect(x: 0, y: 0, width: 470, height: 575),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "춘구마 키우기 도우미"
+        window.title = "춘구마 버튼 도우미"
         window.center()
         window.isReleasedWhenClosed = false
 
         let content = NSView()
         window.contentView = content
 
-        let title = label("춘구마 키우기 도우미", size: 26, weight: .bold)
+        let title = label("춘구마 버튼 도우미", size: 26, weight: .bold)
         let subtitle = label(
             "캐릭터 손의 컵 또는 식기를 인식해 키를 누릅니다.",
             size: 13,
@@ -287,17 +311,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         waterPopup = popup(keyBindings.map(\.title))
         readyFramePopup = popup(readyFrameOptions.map(\.0))
         inputDelayPopup = popup(inputDelayOptions.map(\.0))
+        inputTargetPopup = popup(inputTargetOptions.map(\.0))
+        autoReplayButton = NSButton(
+            checkboxWithTitle: "게임 다시하기 버튼 자동 실행",
+            target: self,
+            action: #selector(selectionChanged)
+        )
 
         let defaults = UserDefaults.standard
         foodPopup.selectItem(at: validIndex(defaults.object(forKey: "foodKeyIndex") as? Int ?? 0, count: keyBindings.count))
         waterPopup.selectItem(at: validIndex(defaults.object(forKey: "waterKeyIndex") as? Int ?? 1, count: keyBindings.count))
         readyFramePopup.selectItem(at: validIndex(defaults.object(forKey: "readyFrameIndex") as? Int ?? 0, count: readyFrameOptions.count))
         inputDelayPopup.selectItem(at: validIndex(defaults.object(forKey: "inputDelayIndex") as? Int ?? 3, count: inputDelayOptions.count))
+        inputTargetPopup.selectItem(at: validIndex(defaults.object(forKey: "inputTargetIndex") as? Int ?? 0, count: inputTargetOptions.count))
+        autoReplayButton.state = (defaults.object(forKey: "autoReplayEnabled") as? Bool ?? true) ? .on : .off
 
         let foodRow = settingsRow(title: "음식 (숟가락·포크)", control: foodPopup)
         let waterRow = settingsRow(title: "물 (컵)", control: waterPopup)
         let speedRow = settingsRow(title: "준비 자세 확인", control: readyFramePopup)
         let delayRow = settingsRow(title: "입력 전 지연", control: inputDelayPopup)
+        let targetRow = settingsRow(title: "입력 대상", control: inputTargetPopup)
+        let replayRow = settingsRow(title: "게임 종료 후", control: autoReplayButton)
 
         startButton = NSButton(title: "시작", target: self, action: #selector(toggleAutomation))
         startButton.bezelStyle = .rounded
@@ -309,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         privacyButton.font = NSFont.systemFont(ofSize: 12)
 
         let note = label(
-            "준비 자세가 유지되면 설정한 지연 후 한 번만 입력합니다.\n실행 중 F8: 즉시 정지/재시작",
+            "춘구마 게임 창만 캡처하며 오디오는 캡처하지 않습니다.\n버튼은 포커스 없이 AXPress로 실행합니다. · 실행 중 F8: 정지/재시작",
             size: 11,
             color: .tertiaryLabelColor
         )
@@ -318,7 +352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         note.alignment = .center
 
         let stack = NSStackView(views: [
-            title, subtitle, statusBox, foodRow, waterRow, speedRow, delayRow,
+            title, subtitle, statusBox, foodRow, waterRow, speedRow, delayRow, targetRow, replayRow,
             startButton, privacyButton, note
         ])
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -331,7 +365,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.setCustomSpacing(6, after: foodRow)
         stack.setCustomSpacing(6, after: waterRow)
         stack.setCustomSpacing(6, after: speedRow)
-        stack.setCustomSpacing(18, after: delayRow)
+        stack.setCustomSpacing(6, after: delayRow)
+        stack.setCustomSpacing(6, after: targetRow)
+        stack.setCustomSpacing(18, after: replayRow)
         stack.setCustomSpacing(8, after: startButton)
         content.addSubview(stack)
 
@@ -346,6 +382,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             waterRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             speedRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             delayRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            targetRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            replayRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startButton.widthAnchor.constraint(equalTo: stack.widthAnchor),
             startButton.heightAnchor.constraint(equalToConstant: 38)
         ])
@@ -355,7 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let titleLabel = label(title, size: 13, weight: .medium)
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         control.setContentHuggingPriority(.required, for: .horizontal)
-        control.widthAnchor.constraint(equalToConstant: 175).isActive = true
+        control.widthAnchor.constraint(equalToConstant: 215).isActive = true
         let row = NSStackView(views: [titleLabel, control])
         row.orientation = .horizontal
         row.alignment = .centerY
@@ -395,11 +433,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func detailForStatus(_ status: String) -> String {
+        if status.contains("카카오톡을 찾을 수 없습니다") {
+            return "카카오톡과 춘구마 키우기 창을 연 뒤 다시 시작하세요."
+        }
         if status.contains("찾는 중") {
             return "미니게임을 화면에 보이게 두세요. 시작 화면에서는 입력하지 않습니다."
         }
         if status.contains("첫 문제") {
             return "컵과 식기 판별이 안정되면 자동 입력을 시작합니다."
+        }
+        if status.contains("다시하기") || status.contains("다시 시작") {
+            return "결과 화면의 게임 다시하기 버튼을 한 번 누르고 다음 판을 기다립니다."
         }
         if status.contains("실패") || status.contains("중단") {
             return "권한을 확인한 뒤 다시 시도하세요."
